@@ -1,0 +1,72 @@
+VAGRANTFILE_API_VERSION = "2"
+
+# set docker as the default provider
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'docker'
+
+# disable parallellism so that the containers come up in order
+ENV['VAGRANT_NO_PARALLEL'] = "1"
+
+ENV['FORWARD_DOCKER_PORTS'] = "1"
+
+# minor hack enabling to run the image and configuration trigger just once
+ENV['VAGRANT_EXPERIMENTAL']="typed_triggers"
+
+
+# Node definitions
+DOCKER_PREFIX = "client/"
+
+CLIENT_IMAGE = "#{DOCKER_PREFIX}ds.01"
+
+CLIENT  = {
+  :dir => "client",
+  :image => CLIENT_IMAGE,
+  :name_prefix => "10.0.1.10",
+  :subnet => "10.0.1.",
+  :ip_offset => 100
+}
+
+# Number of clients to start:
+CLIENTS_COUNT = 6
+
+# Common configuration
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync__exclude: ".*/"
+  config.ssh.insert_key = false
+
+  # Define what to do before the 'vagrant up' command is started
+  config.trigger.before :up, type: :command do |trigger|
+    trigger.name = "Build docker images"
+    trigger.ruby do |env, machine|
+      puts "Building client node image:"
+      `docker build --no-cache -t "#{CLIENT[:image]}" #{CLIENT[:dir]}`
+    end
+  end
+
+
+  # Define client nodes
+  (1..CLIENTS_COUNT).each do |i|
+    node_ip_addr = "#{CLIENT[:subnet]}#{CLIENT[:ip_offset] + i}"
+    node_name = "#{CLIENT[:name_prefix]}#{i}"
+    
+    config.vm.define node_name do |client|
+      # client.vm.network "private_network", ip: node_ip_addr
+      # client.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "0.0.0.0"
+      client.vm.network "private_network", ip: node_ip_addr
+      client.vm.hostname = node_name
+      
+      client.vm.provider "docker" do |docker|
+        docker.image = CLIENT[:image]
+        docker.name = node_name
+        docker.has_ssh = true
+        docker.env = {
+          "STARTUP_DELAY": 30,
+          "CLIENT_ID": i,
+        }
+      end
+      
+      client.vm.post_up_message = "Node #{node_name} up and running. You can access the node with 'vagrant ssh #{node_name}'"
+    end
+  end
+end
+
+# EOF
