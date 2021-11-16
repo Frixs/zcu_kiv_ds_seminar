@@ -6,4 +6,6 @@ RUN pip3 install requests
 
 COPY ./ /opt/client
 
+HEALTHCHECK CMD curl --fail http://localhost:5000/about || exit 1
+
 CMD [ "/usr/bin/python3", "/opt/client/main.py" ]
