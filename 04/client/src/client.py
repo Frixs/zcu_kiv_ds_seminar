@@ -1,13 +1,17 @@
 import os
+import random
+import time
+from time import sleep
+from typing import Optional
+
 from kazoo.client import KazooClient
 from paho.mqtt import client as mqttclient
-import random
-from time import sleep
 
-CLIENT_ID = random.randint(0, 100_000)
-MQTT_PORT = 1883
 
 cancellation_flag = False
+random.seed(time.time() * 1000)  # seed gen
+ID = f"c-{random.randint(0, 100_000)}"  # Random ID for the current node
+MQTT_PORT = 1883
 
 
 def start_keeper() -> KazooClient:
@@ -15,12 +19,13 @@ def start_keeper() -> KazooClient:
     Initialize connection to a keeper client
     """
     print("Starting keeper...")
-    sleep(30)  # debug delay
 
-    hosts = os.environ['KEEPER_HOSTS']
+    hosts = os.environ['ZOO_SERVERS']
+
+    sleep(15)  # debug delay
     client = KazooClient(hosts=hosts)
     client.start()
-    print(f"Keeper client runs on: {{{hosts}}}.", flush=True)
+    print(f"Keeper client runs on: [{hosts}].", flush=True)
 
     return client
 
@@ -42,17 +47,31 @@ def get_mqtt_broker_ip(keeper_client) -> str:
     return keeper_client.get(f"/cluster/{cluster_name}/{broker}")[0].decode("utf-8")
 
 
-def connect_to_mqtt(ip):
+def try_generate_message(client):
+    """
+    Try to generate new message
+    """
+    # Random chance to generate a new message to send
+    if random.random() > 0.5:
+        print(f"Generating a new message...", flush=True)
+        # Publish random number as the message in the MQTT client
+        client.publish("ds/04/message",
+                       f"{ID}:"
+                       f"{random.randint(0, 1000)}")
+        # Sleep after send (random delay)
+        sleep(random.randint(2, 20))
+
+
+def connect_to_mqtt(ip) -> Optional[mqttclient.Client]:
     """
     Connect to the MQTT broker
     """
     try:
-        mqtt_client = mqttclient.Client(CLIENT_ID, reconnect_on_failure=False)
+        mqtt_client = mqttclient.Client(ID, reconnect_on_failure=False)
         mqtt_client.on_connect = event_mqtt_on_connect
         mqtt_client.on_disconnect = event_mqtt_on_disconnect
         # Connect
         mqtt_client.connect(ip, MQTT_PORT)
-
         return mqtt_client
 
     except Exception:
@@ -86,18 +105,22 @@ def event_mqtt_on_message(client, userdata, msg):
     On message MQTT event hadnling
     """
     # Print message of payload
-    print(f"{msg.payload.decode('utf-8')}", flush=True)
-    # TODO any job
+    print(f"MESSAGE: {msg.payload.decode('utf-8')}", flush=True)
+
+    try_generate_message(client)
 
 
-def do_mqtt_loop(keeper_client):
+def client_loop(keeper_client):
     """
     Query brokers from the keeper client, connect, and generate date / catch messages
     """
     print(f"Starting MQTT loop...", flush=True)
     sleep(10)  # init delay
+    global cancellation_flag
 
     while not cancellation_flag:
+        sleep(5)  # TODO R
+        cancellation_flag = False
         # Get and connect to a broker
         broker_ip = get_mqtt_broker_ip(keeper_client)
         mqtt_client = connect_to_mqtt(broker_ip)
@@ -106,37 +129,29 @@ def do_mqtt_loop(keeper_client):
             continue
         print(f"Connected broker: {broker_ip}", flush=True)
 
-        # Set broker to loop forever
-        mqtt_client.loop_forever()
+        try_generate_message(mqtt_client)
 
+        print(f"Subscribing...", flush=True)
         # Subscribe incoming messages
         mqtt_client.subscribe("ds/04/message")
         mqtt_client.on_message = event_mqtt_on_message
-
-        # Random chance to generate a new message to send
-        if random.random() < 0.2:
-            print(f"Generating a new message...", flush=True)
-            # Publish random number as the message in the MQTT client
-            mqtt_client.publish("ds/04/message",
-                                f"{CLIENT_ID}:"
-                                f"{random.randint(0, 1000)}")
-            # Sleep after send (random delay)
-            sleep(random.randint(2, 20))
+        # Set broker to loop forever
+        mqtt_client.loop_forever()
 
         sleep(1)
-    print(f"MQTT has stopped!", flush=True)
+
+    print(f"Stopping MQTT loop...", flush=True)
 
 
 def main():
-    # Connect to Zookeeper
+    # Connect to Keeper client
     keeper_client = start_keeper()
 
-    # MQTT loop
-    do_mqtt_loop(keeper_client)
+    # Main loop (MQTT)
+    client_loop(keeper_client)
 
-    # Close the session to the keeper client
+    # Close the session of the keeper client
     keeper_client.stop()
 
 
-if __name__ == "__main__":
-    main()
+main()

@@ -19,11 +19,11 @@ if [[ ! -f "$ZOO_CONF_DIR/zoo.cfg" ]]; then
         echo "standaloneEnabled=$ZOO_STANDALONE_ENABLED"
         echo "admin.enableServer=$ZOO_ADMINSERVER_ENABLED"
     } >> "$CONFIG"
-    if [[ -z $KEEPER_HOSTS ]]; then
-      KEEPER_HOSTS="server.1=localhost:2888:3888;2181"
+    if [[ -z $ZOO_SERVERS ]]; then
+      ZOO_SERVERS="server.1=localhost:2888:3888;2181"
     fi
 
-    for server in $KEEPER_HOSTS; do
+    for server in $ZOO_SERVERS; do
         echo "$server" >> "$CONFIG"
     done
 
@@ -38,7 +38,7 @@ fi
 
 # Write myid only if it doesn't exist
 if [[ ! -f "$ZOO_DATA_DIR/myid" ]]; then
-    echo "${KEEPER_ID:-1}" > "$ZOO_DATA_DIR/myid"
+    echo "${ZOO_MY_ID:-1}" > "$ZOO_DATA_DIR/myid"
 fi
 
 exec "$@"
