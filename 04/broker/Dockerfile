@@ -18,6 +18,6 @@ RUN chmod a+x /usr/bin/docker-entrypoint.sh
 
 COPY src /opt/broker
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 CMD nc -z localhost 22 && nc -u -z localhost 12345 && mosquitto_sub -t '$SYS/#' -C 1
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 CMD nc -z localhost 22 && nc -u -z localhost 5555 && mosquitto_sub -t '$SYS/#' -C 1
 
 CMD /usr/bin/docker-entrypoint.sh

@@ -8,7 +8,7 @@ from time import sleep
 
 MESSAGE_SEPARATOR = "|"
 MQTT_PORT = 1883
-DISPATCHER_PORT = 12345
+DISPATCHER_PORT = 5555
 
 
 def start_keeper() -> KazooClient:
